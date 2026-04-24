@@ -10,6 +10,8 @@
     <RootNamespace>HdLabs.Capture</RootNamespace>
     <Product>HdLabs</Product>
     <ApplicationIcon>..\..\assets\hd_icon_green.ico</ApplicationIcon>
+    <Description>Screen capture tool for HdLabs.</Description>
+    <PackageTags>HdLabs;screencapture;wpf;utility</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

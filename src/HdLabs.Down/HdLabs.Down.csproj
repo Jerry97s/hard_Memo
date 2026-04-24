@@ -10,6 +10,8 @@
     <RootNamespace>HdLabs.Down</RootNamespace>
     <Product>HdLabs</Product>
     <ApplicationIcon>..\..\assets\hd_icon_green.ico</ApplicationIcon>
+    <Description>Downloader utility for HdLabs.</Description>
+    <PackageTags>HdLabs;downloader;wpf;utility</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

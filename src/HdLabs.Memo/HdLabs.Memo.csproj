@@ -10,6 +10,8 @@
     <RootNamespace>HdLabs.Memo</RootNamespace>
     <Product>HdLabs</Product>
     <ApplicationIcon>..\..\assets\hd_icon_green.ico</ApplicationIcon>
+    <Description>Sticky memo app with rich text, images, and optional AI assistant integration.</Description>
+    <PackageTags>HdLabs;memo;wpf;richtextbox;notes;ai</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

@@ -10,6 +10,8 @@
     <RootNamespace>HdLabs.Cam</RootNamespace>
     <Product>HdLabs</Product>
     <ApplicationIcon>..\..\assets\hd_icon_green.ico</ApplicationIcon>
+    <Description>Lightweight camera/screen utility for HdLabs.</Description>
+    <PackageTags>HdLabs;camera;wpf;utility</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

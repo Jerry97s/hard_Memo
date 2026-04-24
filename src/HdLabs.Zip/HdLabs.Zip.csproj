@@ -10,6 +10,8 @@
     <RootNamespace>HdLabs.Zip</RootNamespace>
     <Product>HdLabs</Product>
     <ApplicationIcon>..\..\assets\hd_icon_green.ico</ApplicationIcon>
+    <Description>Zip/archive helper utility for HdLabs.</Description>
+    <PackageTags>HdLabs;zip;archive;wpf;utility</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

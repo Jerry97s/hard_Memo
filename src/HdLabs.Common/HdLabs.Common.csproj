@@ -8,6 +8,8 @@
     <AssemblyName>HdLabs.Common</AssemblyName>
     <RootNamespace>HdLabs.Common</RootNamespace>
     <Product>HdLabs</Product>
+    <Description>Shared WPF/MVVM utilities and common assets for HdLabs apps.</Description>
+    <PackageTags>HdLabs;wpf;mvvm;utilities</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
