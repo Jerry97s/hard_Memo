@@ -1,0 +1,143 @@
+<Window x:Class="HdLabs.Memo.MemoConfirmDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="확인"
+        Width="460"
+        SizeToContent="Height"
+        MinHeight="220"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/HdLabs.Memo;component/Themes/MemoUiChrome.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <LinearGradientBrush x:Key="DlgBodyFill" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#FEFFFE" Offset="0"/>
+                <GradientStop Color="#F2F7F5" Offset="0.55"/>
+                <GradientStop Color="#E8F1ED" Offset="1"/>
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="DlgBarFill" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#E2F0EA" Offset="0"/>
+                <GradientStop Color="#B8D4C8" Offset="1"/>
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="DlgFrameBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#D9EDE4" Offset="0"/>
+                <GradientStop Color="#9BB5AA" Offset="1"/>
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="DlgText" Color="#263330"/>
+            <SolidColorBrush x:Key="DlgMuted" Color="#4A6358"/>
+            <SolidColorBrush x:Key="DlgDanger" Color="#B42318"/>
+
+            <Style x:Key="DlgPrimary" TargetType="Button">
+                <Setter Property="Foreground" Value="{StaticResource DlgText}"/>
+                <Setter Property="FontFamily" Value="Malgun Gothic"/>
+                <Setter Property="FontSize" Value="14.5"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Padding" Value="18,10"/>
+                <Setter Property="MinWidth" Value="120"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{StaticResource DlgBarFill}"
+                                    BorderBrush="#7BA896"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#D2EBE2"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#A8C4B6"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.6"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="DlgSecondary" TargetType="Button" BasedOn="{StaticResource DlgPrimary}">
+                <Setter Property="FontWeight" Value="Normal"/>
+                <Setter Property="Background" Value="#26FFFFFF"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="28">
+        <Border CornerRadius="16"
+                BorderBrush="{StaticResource DlgFrameBrush}"
+                BorderThickness="1.5"
+                SnapsToDevicePixels="True"
+                MaxWidth="460">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.38" Direction="270" Color="#1A2E28"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        CornerRadius="16,16,0,0"
+                        Background="{StaticResource DlgBarFill}"
+                        BorderBrush="#559BB5AA"
+                        BorderThickness="0,0,0,1"
+                        Padding="18,12"
+                        MouseLeftButtonDown="DragArea_OnMouseLeftButtonDown"
+                        Cursor="Hand">
+                    <TextBlock x:Name="TitleText"
+                               Text="삭제"
+                               FontFamily="Malgun Gothic"
+                               FontSize="13.5"
+                               Foreground="{StaticResource DlgMuted}"
+                               FontWeight="SemiBold"/>
+                </Border>
+
+                <Border Grid.Row="1" Background="{StaticResource DlgBodyFill}" Padding="20,18,20,20" CornerRadius="0,0,16,16">
+                    <StackPanel>
+                        <TextBlock x:Name="MessageText"
+                                   Text="메시지"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   Margin="0,0,0,16"
+                                   FontFamily="Malgun Gothic"
+                                   FontSize="16"
+                                   Foreground="{StaticResource DlgText}"
+                                   LineHeight="26"/>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button x:Name="CancelButton"
+                                    Content="취소"
+                                    Margin="0,0,10,0"
+                                    Style="{StaticResource DlgSecondary}"
+                                    IsCancel="True"
+                                    Click="Cancel_Click"/>
+                            <Button x:Name="OkButton"
+                                    Content="확인"
+                                    Style="{StaticResource DlgPrimary}"
+                                    IsDefault="True"
+                                    Click="Ok_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
+

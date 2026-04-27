@@ -1,0 +1,48 @@
+<Window x:Class="HdLabs.Memo.CalendarPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="캘린더 · 이 메모의 날짜"
+        Width="420"
+        Height="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12"
+                   Foreground="#CCFFFFFF"
+                   Text="캘린더에서 이 메모에 붙일 날짜를 고릅니다. Windows 캘린더 앱에서 보조 일정을 보려면 아래 ‘Windows 캘린더 열기’를 누르세요."/>
+
+        <Viewbox Grid.Row="1" Stretch="Uniform" MaxHeight="280">
+            <Calendar x:Name="DayCalendar"
+                      SelectedDatesChanged="DayCalendar_OnSelectedDatesChanged"/>
+        </Viewbox>
+
+        <StackPanel Grid.Row="2" Orientation="Vertical" Margin="0,14,0,0">
+            <TextBlock x:Name="StatusText"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,10"
+                       Foreground="#8FCCCC"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Windows 캘린더 열기"
+                        Padding="12,8"
+                        Margin="0,0,8,0"
+                        Click="OpenWindowsCalendar_Click"/>
+                <Button Content="날짜 제거"
+                        Padding="12,8"
+                        Margin="0,0,8,0"
+                        Click="ClearDate_Click"/>
+                <Button Content="적용"
+                        Padding="12,8"
+                        IsDefault="True"
+                        Click="Apply_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,119 @@
+<Window x:Class="HdLabs.Memo.MemoReminderNotificationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="알림"
+        Width="420"
+        SizeToContent="Height"
+        MinHeight="200"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/HdLabs.Memo;component/Themes/MemoUiChrome.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <LinearGradientBrush x:Key="NotifyBodyFill" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#FEFFFE" Offset="0"/>
+                <GradientStop Color="#F2F7F5" Offset="0.55"/>
+                <GradientStop Color="#E8F1ED" Offset="1"/>
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="NotifyBarFill" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#E2F0EA" Offset="0"/>
+                <GradientStop Color="#B8D4C8" Offset="1"/>
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="NotifyFrameBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#D9EDE4" Offset="0"/>
+                <GradientStop Color="#9BB5AA" Offset="1"/>
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="NotifyText" Color="#263330"/>
+            <SolidColorBrush x:Key="NotifyMuted" Color="#4A6358"/>
+
+            <Style x:Key="NotifyPrimary" TargetType="Button">
+                <Setter Property="Foreground" Value="{StaticResource NotifyText}"/>
+                <Setter Property="FontFamily" Value="Malgun Gothic"/>
+                <Setter Property="FontSize" Value="14.5"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Padding" Value="32,10"/>
+                <Setter Property="MinWidth" Value="120"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{StaticResource NotifyBarFill}"
+                                    BorderBrush="#7BA896"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#D2EBE2"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#A8C4B6"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="28">
+        <Border CornerRadius="16"
+                BorderBrush="{StaticResource NotifyFrameBrush}"
+                BorderThickness="1.5"
+                SnapsToDevicePixels="True"
+                MaxWidth="420">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.38" Direction="270" Color="#1A2E28"/>
+            </Border.Effect>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" CornerRadius="16,16,0,0" Background="{StaticResource NotifyBarFill}" BorderBrush="#559BB5AA" BorderThickness="0,0,0,1" Padding="18,12" MouseLeftButtonDown="DragArea_OnMouseLeftButtonDown" Cursor="Hand">
+                    <TextBlock Text="미리 알림"
+                             FontFamily="Malgun Gothic"
+                             FontSize="13.5"
+                             Foreground="{StaticResource NotifyMuted}"
+                             FontWeight="SemiBold"/>
+                </Border>
+                <Border Grid.Row="1" Background="{StaticResource NotifyBodyFill}" Padding="20,16,20,20" CornerRadius="0,0,16,16">
+                    <StackPanel>
+                    <TextBlock x:Name="TitleRun"
+                             TextWrapping="Wrap"
+                             TextAlignment="Center"
+                             MaxWidth="360"
+                             FontFamily="Malgun Gothic"
+                             FontSize="22"
+                             FontWeight="SemiBold"
+                             Foreground="{StaticResource NotifyText}"
+                             LineHeight="32"/>
+                    <TextBlock Text="지정하신 알림 시각이 되었습니다."
+                             TextAlignment="Center"
+                             Margin="0,10,0,18"
+                             FontFamily="Malgun Gothic"
+                             FontSize="13.5"
+                             Foreground="{StaticResource NotifyMuted}"/>
+                    <Button Content="확인"
+                            Style="{StaticResource NotifyPrimary}"
+                            HorizontalAlignment="Center"
+                            IsDefault="True"
+                            Click="Ok_Click"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

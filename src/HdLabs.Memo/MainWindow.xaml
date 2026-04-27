@@ -275,14 +275,14 @@
                                 Style="{StaticResource MemoIconButton}"
                                 ToolTip="새 메모 (Ctrl+N)"
                                 Command="{Binding NewCommand}"
-                                Padding="8,8">
+                                Padding="8,8" Click="Button_Click">
                             <Viewbox Width="26"
                                      Height="26"
                                      Stretch="Uniform">
                                 <TextBlock FontFamily="Segoe MDL2 Assets"
                                            FontSize="24"
                                            Foreground="{StaticResource MemoToolbarIconBrush}"
-                                           Text="&#xE710;"/>
+                                           Text="&#xE710;" RenderTransformOrigin="0.542,0.542"/>
                             </Viewbox>
                         </Button>
 
@@ -326,13 +326,19 @@
                                         <Separator/>
                                         <MenuItem Header="메모 편집" Command="{Binding ShowEditorCommand}"/>
                                         <MenuItem Header="메모 목록" Command="{Binding ShowListCommand}"/>
+                                        <Separator/>
+                                        <MenuItem Header="현재 메모 삭제" Click="DeleteCurrentMemo_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="숨기기 (트레이로)" Click="HideToTray_Click" InputGestureText="Esc"/>
+                                        <MenuItem Header="앞으로 가져오기 단축키 설정..." Click="HotkeySetup_Click"/>
+                                        <MenuItem Header="완전 종료" Click="ExitApp_Click"/>
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>
                             <Button Style="{StaticResource MemoIconButton}"
-                                    ToolTip="일정 (캘린더 연동 예정)"
+                                    ToolTip="캘린더 — 이 메모에 날짜 붙이기, Windows 캘린더 열기"
                                     Padding="8,8"
-                                    Click="PlaceholderCalendar_Click">
+                                    Click="CalendarButton_Click">
                                 <Viewbox Width="26"
                                          Height="26"
                                          Stretch="Uniform">
@@ -346,8 +352,8 @@
                             <Button Style="{StaticResource MemoIconButton}"
                                     Padding="8,8"
                                     ClipToBounds="False"
-                                    ToolTip="알림 (예정)"
-                                    Click="PlaceholderAlarm_Click">
+                                    ToolTip="알림 — 이 메모에 미리 알림 시각 설정"
+                                    Click="AlarmButton_Click">
                                 <Viewbox Width="26"
                                          Height="26"
                                          Stretch="Uniform">
@@ -631,12 +637,13 @@
                                       Style="{StaticResource MemoListView}"
                                       ItemsSource="{Binding Items}"
                                       SelectedItem="{Binding Selected}"
+                                      SelectionMode="Extended"
                                       MouseDoubleClick="MemoList_OnMouseDoubleClick"
                                       KeyDown="MemoList_OnKeyDown">
                                 <ListView.ContextMenu>
                                     <ContextMenu DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListView}}">
                                         <MenuItem Header="편집" Command="{Binding OpenSelectedCommand}"/>
-                                        <MenuItem Header="삭제" Command="{Binding DeleteSelectedCommand}"/>
+                                        <MenuItem Header="삭제" Click="MemoList_DeleteSelected_Click"/>
                                     </ContextMenu>
                                 </ListView.ContextMenu>
 

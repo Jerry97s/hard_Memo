@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Media;
 using System.Windows;
 using System.Windows.Threading;
 using HdLabs.Common.Mvvm;
+using HdLabs.Memo;
 using HdLabs.Memo.Helpers;
 using HdLabs.Memo.Models;
 using HdLabs.Memo.Services;
@@ -22,6 +24,9 @@ public sealed class MainViewModel : ViewModelBase
     private bool _isDirty;
     private bool _suppressDirty;
     private readonly DispatcherTimer _autoSave = new() { Interval = TimeSpan.FromMilliseconds(900) };
+    private readonly DispatcherTimer _reminderTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private DateTime? _editorScheduleDate;
+    private DateTimeOffset? _editorReminderAt;
 
     public string Title => "HdLabs Memo";
 
@@ -125,6 +130,52 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public string BringToFrontHotkey
+    {
+        get => string.IsNullOrWhiteSpace(_root.Settings.BringToFrontHotkey) ? "Ctrl+Alt+M" : _root.Settings.BringToFrontHotkey.Trim();
+        set
+        {
+            var v = string.IsNullOrWhiteSpace(value) ? "Ctrl+Alt+M" : value.Trim();
+            if (string.Equals(_root.Settings.BringToFrontHotkey, v, StringComparison.OrdinalIgnoreCase))
+                return;
+            _root.Settings.BringToFrontHotkey = v;
+            OnPropertyChanged();
+            Persist();
+        }
+    }
+
+    /// <summary>편집 중인 메모에 캘린더로 붙이는 날짜(시간은 무시).</summary>
+    public DateTime? EditorScheduleDate
+    {
+        get => _editorScheduleDate;
+        set
+        {
+            if (!SetProperty(ref _editorScheduleDate, value))
+                return;
+            if (!_suppressDirty)
+            {
+                _isDirty = true;
+                RestartAutoSave();
+            }
+        }
+    }
+
+    /// <summary>편집 중인 메모의 미리 알림 시각.</summary>
+    public DateTimeOffset? EditorReminderAt
+    {
+        get => _editorReminderAt;
+        set
+        {
+            if (!SetProperty(ref _editorReminderAt, value))
+                return;
+            if (!_suppressDirty)
+            {
+                _isDirty = true;
+                RestartAutoSave();
+            }
+        }
+    }
+
     public RelayCommand NewCommand { get; }
     public RelayCommand SaveCommand { get; }
     public RelayCommand ShowEditorCommand { get; }
@@ -132,6 +183,8 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand OpenSelectedCommand { get; }
     public RelayCommand DeleteSelectedCommand { get; }
     public RelayCommand TogglePinCommand { get; }
+
+    public Guid? EditingId => _editingId;
 
     public MainViewModel()
     {
@@ -150,6 +203,9 @@ public sealed class MainViewModel : ViewModelBase
             Persist();
         };
 
+        _reminderTimer.Tick += (_, _) => OnReminderTimerTick();
+        _reminderTimer.Start();
+
         _root = _data.Load();
         if (_root.Items.Count == 0)
             Seed();
@@ -162,9 +218,49 @@ public sealed class MainViewModel : ViewModelBase
 
     public void OnWindowClosing()
     {
+        _reminderTimer.Stop();
         _autoSave.Stop();
         FlushEditorToItem();
         Persist();
+    }
+
+    private void OnReminderTimerTick()
+    {
+        var wasDirty = _isDirty;
+        FlushEditorToItem();
+        if (wasDirty)
+            Persist();
+
+        var now = DateTimeOffset.Now;
+        var anyFired = false;
+        var owner = Application.Current?.MainWindow;
+
+        foreach (var m in Items)
+        {
+            if (m.ReminderAt is not { } t || t > now)
+                continue;
+            anyFired = true;
+            m.ReminderAt = null;
+            if (_editingId == m.Id)
+            {
+                _editorReminderAt = null;
+                OnPropertyChanged(nameof(EditorReminderAt));
+            }
+
+            var showTitle = string.IsNullOrWhiteSpace(m.Title) ? "제목 없음" : m.Title.Trim();
+            if (owner is Window w)
+            {
+                if (w.WindowState == WindowState.Minimized)
+                    w.WindowState = WindowState.Normal;
+                w.Activate();
+            }
+
+            SystemSounds.Asterisk.Play();
+            new MemoReminderNotificationWindow(showTitle).ShowDialog();
+        }
+
+        if (anyFired)
+            Persist();
     }
 
     public void SetCardTintFromUi(string? hex8)
@@ -186,6 +282,105 @@ public sealed class MainViewModel : ViewModelBase
         Persist();
     }
 
+    public sealed record ReminderHistoryUiItem(
+        string Label,
+        bool Enabled,
+        DateTimeOffset ChangedAtLocal,
+        DateTimeOffset? TargetAtLocal);
+
+    private void EnsureReminderHistoryMigrated()
+    {
+        _root.Settings.ReminderHistoryV2 ??= new();
+        _root.Settings.ReminderTimeHistory ??= new();
+
+        if (_root.Settings.ReminderHistoryV2.Count > 0)
+            return;
+
+        // v1(시간만) → v2(상태 포함): 기존 항목은 "켜짐"으로 간주
+        foreach (var s in _root.Settings.ReminderTimeHistory)
+        {
+            if (!DateTimeOffset.TryParse(s, null, out var p))
+                continue;
+            _root.Settings.ReminderHistoryV2.Add(new ReminderHistoryEntry
+            {
+                Enabled = true,
+                TargetAtIso = p.ToString("O"),
+                ChangedAtIso = DateTimeOffset.Now.ToString("O"),
+            });
+            if (_root.Settings.ReminderHistoryV2.Count >= 5)
+                break;
+        }
+    }
+
+    /// <summary>알림 창 '최근 설정' 리스트(상태 포함), 최대 5, 최신이 앞.</summary>
+    public IReadOnlyList<ReminderHistoryUiItem> GetReminderHistory()
+    {
+        EnsureReminderHistoryMigrated();
+        var items = new List<ReminderHistoryUiItem>();
+        foreach (var e in _root.Settings.ReminderHistoryV2)
+        {
+            if (!DateTimeOffset.TryParse(e.ChangedAtIso, null, out var changed))
+                continue;
+            DateTimeOffset? target = null;
+            if (!string.IsNullOrWhiteSpace(e.TargetAtIso) && DateTimeOffset.TryParse(e.TargetAtIso, null, out var t))
+                target = t;
+
+            var changedLocal = changed.ToLocalTime();
+            var targetLocal = target?.ToLocalTime();
+            var label = e.Enabled
+                ? $"켜짐 · {targetLocal:yyyy.MM.dd HH:mm} (설정: {changedLocal:MM.dd HH:mm})"
+                : $"꺼짐 · {changedLocal:yyyy.MM.dd HH:mm}";
+
+            items.Add(new ReminderHistoryUiItem(label, e.Enabled, changedLocal, targetLocal));
+        }
+
+        return items;
+    }
+
+    /// <summary>알림을 켠 이력을 추가(최대 5), 저장합니다.</summary>
+    public void AddReminderEnabledHistory(DateTimeOffset targetAtLocal)
+    {
+        EnsureReminderHistoryMigrated();
+        var dto = targetAtLocal.ToLocalTime();
+        var entry = new ReminderHistoryEntry
+        {
+            Enabled = true,
+            TargetAtIso = dto.ToString("O"),
+            ChangedAtIso = DateTimeOffset.Now.ToString("O"),
+        };
+        PushReminderHistoryEntry(entry);
+    }
+
+    /// <summary>알림을 끈 이력을 추가(최대 5), 저장합니다.</summary>
+    public void AddReminderDisabledHistory()
+    {
+        EnsureReminderHistoryMigrated();
+        var entry = new ReminderHistoryEntry
+        {
+            Enabled = false,
+            TargetAtIso = null,
+            ChangedAtIso = DateTimeOffset.Now.ToString("O"),
+        };
+        PushReminderHistoryEntry(entry);
+    }
+
+    private void PushReminderHistoryEntry(ReminderHistoryEntry entry)
+    {
+        var next = new List<ReminderHistoryEntry> { entry };
+
+        foreach (var e in _root.Settings.ReminderHistoryV2)
+        {
+            if (next.Count >= 5)
+                break;
+            if (e.Enabled == entry.Enabled && string.Equals(e.TargetAtIso, entry.TargetAtIso, StringComparison.Ordinal))
+                continue;
+            next.Add(e);
+        }
+
+        _root.Settings.ReminderHistoryV2 = next;
+        Persist();
+    }
+
     private void GoList()
     {
         FlushEditorToItem();
@@ -195,7 +390,8 @@ public sealed class MainViewModel : ViewModelBase
 
     private void New()
     {
-        if (_isDirty && (NewTitle.Length > 0 || !MemoBodyDocumentHelper.IsBodyVisuallyEmpty(NewBody)))
+        if (_isDirty && (NewTitle.Length > 0 || !MemoBodyDocumentHelper.IsBodyVisuallyEmpty(NewBody)
+                         || _editorScheduleDate is not null || _editorReminderAt is not null))
         {
             var r = MessageBox.Show(
                 "편집 중인 내용이 있습니다. 저장하지 않고 새 메모를 시작할까요?\n(아니요: 취소, 예: 지우고 새로)",
@@ -213,9 +409,13 @@ public sealed class MainViewModel : ViewModelBase
             _newTitle = "";
             _newTitleXaml = "";
             _newBody = "";
+            _editorScheduleDate = null;
+            _editorReminderAt = null;
             OnPropertyChanged(nameof(NewTitle));
             OnPropertyChanged(nameof(NewTitleXaml));
             OnPropertyChanged(nameof(NewBody));
+            OnPropertyChanged(nameof(EditorScheduleDate));
+            OnPropertyChanged(nameof(EditorReminderAt));
             _isDirty = false;
         }
         finally
@@ -240,9 +440,13 @@ public sealed class MainViewModel : ViewModelBase
             _newTitle = Selected.Title;
             _newTitleXaml = Selected.TitleXaml ?? "";
             _newBody = Selected.Body;
+            _editorScheduleDate = Selected.ScheduleDate;
+            _editorReminderAt = Selected.ReminderAt;
             OnPropertyChanged(nameof(NewTitle));
             OnPropertyChanged(nameof(NewTitleXaml));
             OnPropertyChanged(nameof(NewBody));
+            OnPropertyChanged(nameof(EditorScheduleDate));
+            OnPropertyChanged(nameof(EditorReminderAt));
             _isDirty = false;
         }
         finally
@@ -258,9 +462,6 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (Selected is null)
             return;
-        if (MessageBox.Show($"\"{Selected.Title}\" 메모를 삭제할까요?", "삭제", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
-            return;
-
         var id = Selected.Id;
         if (_editingId == id)
         {
@@ -271,9 +472,13 @@ public sealed class MainViewModel : ViewModelBase
                 _newTitle = "";
                 _newTitleXaml = "";
                 _newBody = "";
+                _editorScheduleDate = null;
+                _editorReminderAt = null;
                 OnPropertyChanged(nameof(NewTitle));
                 OnPropertyChanged(nameof(NewTitleXaml));
                 OnPropertyChanged(nameof(NewBody));
+                OnPropertyChanged(nameof(EditorScheduleDate));
+                OnPropertyChanged(nameof(EditorReminderAt));
                 _isDirty = false;
             }
             finally
@@ -295,6 +500,68 @@ public sealed class MainViewModel : ViewModelBase
         Persist();
         OpenSelectedCommand.RaiseCanExecuteChanged();
         DeleteSelectedCommand.RaiseCanExecuteChanged();
+    }
+
+    public bool DeleteByIds(IEnumerable<Guid> ids)
+    {
+        var idSet = new HashSet<Guid>(ids);
+        if (idSet.Count == 0)
+            return false;
+
+        var removedAny = false;
+
+        if (_editingId is Guid eid && idSet.Contains(eid))
+        {
+            _editingId = null;
+            _suppressDirty = true;
+            try
+            {
+                _newTitle = "";
+                _newTitleXaml = "";
+                _newBody = "";
+                _editorScheduleDate = null;
+                _editorReminderAt = null;
+                OnPropertyChanged(nameof(NewTitle));
+                OnPropertyChanged(nameof(NewTitleXaml));
+                OnPropertyChanged(nameof(NewBody));
+                OnPropertyChanged(nameof(EditorScheduleDate));
+                OnPropertyChanged(nameof(EditorReminderAt));
+                _isDirty = false;
+            }
+            finally
+            {
+                _suppressDirty = false;
+            }
+        }
+
+        for (var i = Items.Count - 1; i >= 0; i--)
+        {
+            if (!idSet.Contains(Items[i].Id))
+                continue;
+            Items.RemoveAt(i);
+            removedAny = true;
+        }
+
+        if (Selected is { } s && idSet.Contains(s.Id))
+            Selected = null;
+
+        if (removedAny)
+        {
+            Persist();
+            OpenSelectedCommand.RaiseCanExecuteChanged();
+            DeleteSelectedCommand.RaiseCanExecuteChanged();
+        }
+
+        return removedAny;
+    }
+
+    public bool DeleteEditingOrSelected()
+    {
+        if (_editingId is Guid eid)
+            return DeleteByIds(new[] { eid });
+        if (Selected is { } s)
+            return DeleteByIds(new[] { s.Id });
+        return false;
     }
 
     private void CommitAndPersist()
@@ -320,9 +587,13 @@ public sealed class MainViewModel : ViewModelBase
                 item.TitleXaml = string.IsNullOrWhiteSpace(NewTitleXaml) ? null : NewTitleXaml;
                 item.Body = body;
                 item.ModifiedAt = now;
+                item.ScheduleDate = _editorScheduleDate;
+                item.ReminderAt = _editorReminderAt;
             }
         }
-        else if (!string.IsNullOrEmpty(NewTitle) || !MemoBodyDocumentHelper.IsBodyVisuallyEmpty(NewBody))
+        else if (!string.IsNullOrEmpty(NewTitle) || !MemoBodyDocumentHelper.IsBodyVisuallyEmpty(NewBody)
+                 || _editorScheduleDate is not null
+                 || _editorReminderAt is not null)
         {
             var item = new MemoItem
             {
@@ -332,6 +603,8 @@ public sealed class MainViewModel : ViewModelBase
                 Body = body,
                 CreatedAt = now,
                 ModifiedAt = now,
+                ScheduleDate = _editorScheduleDate,
+                ReminderAt = _editorReminderAt,
             };
             Items.Insert(0, item);
             _editingId = item.Id;
@@ -345,7 +618,9 @@ public sealed class MainViewModel : ViewModelBase
         if (CurrentView != "Editor" || _suppressDirty)
             return;
         if (_editingId is null && string.IsNullOrEmpty(NewTitle) && string.IsNullOrEmpty(NewTitleXaml)
-            && MemoBodyDocumentHelper.IsBodyVisuallyEmpty(NewBody))
+            && MemoBodyDocumentHelper.IsBodyVisuallyEmpty(NewBody)
+            && _editorScheduleDate is null
+            && _editorReminderAt is null)
             return;
         _autoSave.Stop();
         _autoSave.Start();

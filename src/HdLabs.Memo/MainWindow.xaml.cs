@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Windows.Interop;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -15,8 +16,10 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using HdLabs.Memo.Ai;
 using HdLabs.Memo.Helpers;
+using HdLabs.Memo.Models;
 using HdLabs.Memo.ViewModels;
 using Microsoft.Win32;
+using Key = System.Windows.Input.Key;
 
 namespace HdLabs.Memo;
 
@@ -51,6 +54,9 @@ public partial class MainWindow : Window
     // "칸(문단)" 단위로 마지막으로 지정한 타이핑 서식을 유지
     private readonly Dictionary<Paragraph, (FontFamily? Family, double? SizeDips)> _typingFormatByParagraph = new();
     private readonly DispatcherTimer _bulletPopupCloseTimer;
+    private GlobalHotkey? _hotkey;
+    private HwndSource? _hwndSource;
+    private bool _exiting;
     private static readonly int[] FontSizePresets =
         { 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 36, 40, 48, 56, 64, 72 };
 
@@ -100,16 +106,91 @@ public partial class MainWindow : Window
                 SetCaretToPreferredOnBodyLoad(v.NewBody, d);
             }),
             DispatcherPriority.Input);
+
+        EnsureTrayAndHotkey();
+    }
+
+    private void EnsureTrayAndHotkey()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+            return;
+
+        _hwndSource ??= HwndSource.FromHwnd(hwnd);
+        if (_hwndSource is not null)
+        {
+            _hwndSource.RemoveHook(WndProc);
+            _hwndSource.AddHook(WndProc);
+        }
+
+        _hotkey ??= new GlobalHotkey(hwnd, id: 0xBEEF);
+        if (DataContext is MainViewModel vm && TryParseHotkey(vm.BringToFrontHotkey, out var mods, out var key))
+            _hotkey.Register(mods | GlobalHotkey.Modifiers.NoRepeat, key);
+        else
+            _hotkey.Register(GlobalHotkey.Modifiers.Control | GlobalHotkey.Modifiers.Alt | GlobalHotkey.Modifiers.NoRepeat, Key.M);
+    }
+
+    private static bool TryParseHotkey(string? text, out GlobalHotkey.Modifiers mods, out Key key)
+    {
+        mods = GlobalHotkey.Modifiers.None;
+        key = Key.None;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+        var parts = text.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+            return false;
+
+        if (!Enum.TryParse(parts[^1], ignoreCase: true, out key))
+            return false;
+
+        for (var i = 0; i < parts.Length - 1; i++)
+        {
+            var p = parts[i];
+            if (p.Equals("Ctrl", StringComparison.OrdinalIgnoreCase) || p.Equals("Control", StringComparison.OrdinalIgnoreCase))
+                mods |= GlobalHotkey.Modifiers.Control;
+            else if (p.Equals("Alt", StringComparison.OrdinalIgnoreCase))
+                mods |= GlobalHotkey.Modifiers.Alt;
+            else if (p.Equals("Shift", StringComparison.OrdinalIgnoreCase))
+                mods |= GlobalHotkey.Modifiers.Shift;
+            else if (p.Equals("Win", StringComparison.OrdinalIgnoreCase) || p.Equals("Windows", StringComparison.OrdinalIgnoreCase))
+                mods |= GlobalHotkey.Modifiers.Win;
+        }
+
+        return mods != GlobalHotkey.Modifiers.None && key != Key.None;
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == GlobalHotkey.WmHotkey)
+        {
+            handled = true;
+            BringToFrontFromAnywhere();
+        }
+        return IntPtr.Zero;
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (DataContext is MainViewModel vm)
-            vm.OnWindowClosing();
+        if (_exiting)
+        {
+            if (DataContext is MainViewModel vm)
+                vm.OnWindowClosing();
+            _hotkey?.Dispose();
+            return;
+        }
+
+        e.Cancel = true;
+        HideToTray();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape)
+        {
+            HideToTray();
+            e.Handled = true;
+            return;
+        }
         if (e.Key != Key.Delete)
             return;
         if (Keyboard.FocusedElement is not ListView && Keyboard.FocusedElement is not ListViewItem)
@@ -133,13 +214,8 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Delete)
             return;
-        if (DataContext is not MainViewModel vm)
-            return;
-        if (vm.DeleteSelectedCommand.CanExecute(null))
-        {
-            vm.DeleteSelectedCommand.Execute(null);
-            e.Handled = true;
-        }
+        DeleteSelectedMemosFromList();
+        e.Handled = true;
     }
 
     private void Chrome_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -149,6 +225,87 @@ public partial class MainWindow : Window
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void HideToTray_Click(object sender, RoutedEventArgs e) => HideToTray();
+
+    private void ExitApp_Click(object sender, RoutedEventArgs e) => ExitApp();
+
+    private void HotkeySetup_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+        new HotkeySetupWindow(vm) { Owner = this }.ShowDialog();
+        EnsureTrayAndHotkey();
+    }
+
+    private void MemoList_DeleteSelected_Click(object sender, RoutedEventArgs e) => DeleteSelectedMemosFromList();
+
+    private void DeleteCurrentMemo_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var title = vm.NewTitle;
+        var display = string.IsNullOrWhiteSpace(title) ? "제목 없음" : title.Trim();
+        if (!MemoConfirmDialog.ShowDialog(this, "삭제", $"\"{display}\" 메모를 삭제할까요?"))
+            return;
+
+        vm.DeleteEditingOrSelected();
+        vm.ShowListCommand.Execute(null);
+    }
+
+    private void DeleteSelectedMemosFromList()
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var selected = MemoList.SelectedItems.Cast<object>().ToList();
+        var memos = selected.OfType<MemoItem>().ToList();
+        if (memos.Count == 0 && vm.Selected is not null)
+            memos = new() { vm.Selected };
+
+        if (memos.Count == 0)
+            return;
+
+        var msg = memos.Count == 1
+            ? $"\"{memos[0].Title}\" 메모를 삭제할까요?"
+            : $"선택한 {memos.Count}개 메모를 삭제할까요?";
+
+        if (!MemoConfirmDialog.ShowDialog(this, "삭제", msg))
+            return;
+
+        vm.DeleteByIds(memos.Select(m => m.Id));
+    }
+
+    private void HideToTray()
+    {
+        EnsureTrayAndHotkey();
+        if (WindowState != WindowState.Minimized)
+            WindowState = WindowState.Minimized;
+        Hide();
+    }
+
+    private void ExitApp()
+    {
+        _exiting = true;
+        Close();
+        Application.Current.Shutdown();
+    }
+
+    private void BringToFrontFromAnywhere()
+    {
+        EnsureTrayAndHotkey();
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+
+        // Topmost toggle trick to ensure foreground
+        var wasTopmost = Topmost;
+        Topmost = true;
+        Activate();
+        Topmost = wasTopmost;
+        Focus();
+    }
 
     private void AiAssistant_Click(object sender, RoutedEventArgs e)
     {
@@ -212,11 +369,19 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void PlaceholderCalendar_Click(object sender, RoutedEventArgs e) =>
-        MessageBox.Show("캘린더/일정 앱과 연동하는 기능은 추후 릴리스에 포함될 수 있습니다.", "일정", MessageBoxButton.OK, MessageBoxImage.Information);
+    private void CalendarButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+        new CalendarPickerWindow(vm) { Owner = this }.ShowDialog();
+    }
 
-    private void PlaceholderAlarm_Click(object sender, RoutedEventArgs e) =>
-        MessageBox.Show("알림(미리 알림)은 추후 릴리스에 포함될 수 있습니다.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
+    private void AlarmButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+        new ReminderSetupWindow(vm) { Owner = this }.ShowDialog();
+    }
 
     private void ColorPickerButton_Click(object sender, RoutedEventArgs e)
     {
@@ -1621,6 +1786,11 @@ public partial class MainWindow : Window
 
         UpdateFontSizeDisplayForUnitOnly(GetCurrentFontAtCaret().Size);
         MemoBody.Focus();
+    }
+
+    private void Button_Click(object sender, RoutedEventArgs e)
+    {
+
     }
 
     private void MemoBodyContext_FontSizeUnitPx_Click(object sender, RoutedEventArgs e)

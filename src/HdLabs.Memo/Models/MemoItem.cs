@@ -11,6 +11,8 @@ public sealed class MemoItem : ObservableObject
     private DateTimeOffset _createdAt = DateTimeOffset.Now;
     private DateTimeOffset _modifiedAt = DateTimeOffset.Now;
     private string _group = "일반";
+    private DateTime? _scheduleDate;
+    private DateTimeOffset? _reminderAt;
 
     public Guid Id
     {
@@ -58,6 +60,20 @@ public sealed class MemoItem : ObservableObject
     {
         get => _group;
         set => SetProperty(ref _group, value);
+    }
+
+    /// <summary>캘린더에서 이 메모에 붙이는 날짜(로컬 날짜, 시간은 무시).</summary>
+    public DateTime? ScheduleDate
+    {
+        get => _scheduleDate;
+        set => SetProperty(ref _scheduleDate, value);
+    }
+
+    /// <summary>이 시각(로컬 기준)에 알림(미리 알림)이 울리도록 설정.</summary>
+    public DateTimeOffset? ReminderAt
+    {
+        get => _reminderAt;
+        set => SetProperty(ref _reminderAt, value);
     }
 
     public string CreatedDisplay => CreatedAt.ToLocalTime().ToString("yyyy.MM.dd HH:mm");
